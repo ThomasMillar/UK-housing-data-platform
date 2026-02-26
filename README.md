@@ -127,13 +127,15 @@ SELECT
 FROM price_paid_analytics
 GROUP BY date_trunc('month', transfer_date)
 ORDER BY month;
+```
+
 This ensures dashboards query only lightweight aggregated data (24 rows instead of millions).
 
 🚀 Backend API (FastAPI)
 
 A REST API exposes curated analytics data.
 Example endpoint: GET /monthly-average-prices
-
+```python
 Returns:
 [
   {
@@ -141,7 +143,7 @@ Returns:
     "avg_price": 245000
   }
 ]
-
+```
 The API does not expose raw transactional data directly.
 It queries the presentation-layer SQL view for performance and architectural separation.
 
@@ -179,23 +181,30 @@ This ensures:
 ⚙️ How To Run Locally
 
 1. Clone Repository
+```bash
 git clone <repo-url>
 cd UK-housing-data-platform
-
+```
 2. Start Database (Docker)
+```bash
 docker compose up -d
-
+```
 3. Load Data
+```bash
 py scripts/load_price_paid.py
-
+```
 4. Start API
+```bash
 py -m uvicorn api.main:app --reload
+```
 Visit:
 http://127.0.0.1:8000/docs
 
 5. Start Dashboard
 In a new terminal:
+```bash
 py -m streamlit run dashboard/app.py
+```
 Visit:
 http://localhost:8501
 
