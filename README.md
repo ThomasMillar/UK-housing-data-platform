@@ -1,78 +1,221 @@
 # UK Housing Data Platform
 
-An end-to-end data engineering project built using UK residential transaction data from  
-HM Land Registry Price Paid Data.
+An end-to-end full stack data engineering and analytics platform built using UK residential transaction data from HM Land Registry Price Paid Data.
+
+This project simulates a production-style data workflow — from raw public datasets to a containerised database, backend API, and interactive dashboard.
 
 ---
 
 ## 🎯 Project Goal
 
-To design and build a full-stack housing market data platform including:
+To design and build a modern data platform that demonstrates:
 
-- Automated ingestion of transaction data
-- Data cleaning and transformation
-- Database modelling
+- Automated ingestion of large public datasets
+- Structured database modelling
+- Clean transformation and analytics layering
 - REST API development
-- Interactive visualisation
+- Containerised infrastructure (Docker)
+- Interactive dashboard visualisation
+- Separation of ingestion, analytics, and presentation layers
 
-The goal is to simulate a production-style data engineering workflow from raw public data to a user-facing application.
+The goal is to replicate how real-world data systems are built in production environments.
 
 ---
 
 ## 🏗️ Architecture Overview
 
-The platform follows a layered data engineering approach:
+The platform follows a layered architecture separating ingestion, transformation, and presentation:
+↓
+PostgreSQL (Docker)
+↓
+Raw Ingestion Table (~1.9M rows)
+↓
+Analytics Table (cleaned + engineered features)
+↓
+Aggregated View (monthly averages)
+↓
+FastAPI Backend
+↓
+Streamlit Dashboard / Power BI
 
-Raw Data → Processed Data → Database → API → Frontend
 
-- **Raw layer**: Source CSV files downloaded from official government datasets  
-- **Processing layer**: Data cleaning, schema enforcement, partitioning  
-- **Database layer**: Structured PostgreSQL schema  
-- **API layer**: FastAPI endpoints for data access  
-- **Frontend layer**: Interactive dashboards  
+This separation ensures:
+
+- Reproducibility
+- Clear system boundaries
+- Performance optimisation
+- Production-style data engineering design
 
 ---
 
 ## 📦 Data Source
 
-The dataset is published by HM Land Registry via:
+Dataset: HM Land Registry – UK Price Paid Data  
+Published via GOV.UK and data.gov.uk  
 
-- GOV.UK  
-- data.gov.uk  
+The dataset contains residential property transaction records across England and Wales including:
 
-The data contains residential property transaction records across England and Wales.
+- Transaction price  
+- Transfer date  
+- Property type  
+- Town / district / county  
+- Postcode  
+
+For performance optimisation, selected years (2019–2020) are processed during development.
 
 ---
 
 ## 📥 Data Ingestion Strategy
 
-### Challenges
+### Real-World Challenges Encountered
 
-During development, several real-world ingestion challenges were encountered:
+During development, several ingestion challenges were addressed:
 
-- The linked-data API returns metadata rather than raw CSV files.
-- Direct S3 access returned restricted (`403`) responses.
-- Some years are published as full files (`pp-YYYY.csv`) while others are split into part files (`pp-YYYY-partX.csv`).
-- Dataset pages contain multiple resource types requiring filtering logic.
+- Linked-data endpoints return metadata rather than raw CSV files.
+- Direct S3 access may return restricted (`403`) responses.
+- Some years are full CSV files (`pp-YYYY.csv`) while others are split (`pp-YYYY-partX.csv`).
+- Dataset pages contain mixed resource formats requiring filtering logic.
+- Large file sizes (~500k rows per file).
 
-### Solution
+### Implemented Solution
 
 The ingestion pipeline:
 
-- Scrapes official dataset pages for available CSV files.
-- Filters and downloads only `pp-YYYY-partX.csv` files.
-- Skips files already downloaded (idempotent behaviour).
-- Stores files in a structured `/data/raw` layer.
-- Supports incremental loading for future updates.
+- Downloads selected year-part CSV files
+- Stores files in `/data/raw`
+- Loads data into PostgreSQL via Python ETL scripts
+- Supports incremental ingestion
+- Avoids reprocessing existing files
 
-This ensures reliable, repeatable data ingestion aligned with production-style data engineering practices.
+This design reflects production ETL behaviour rather than simple CSV import.
 
 ---
 
-## 🛠️ Tech Stack (Planned)
+## 🗄️ Database Architecture
 
-- Python  
-- PostgreSQL  
-- FastAPI  
-- Pandas  
-- Streamlit (or React)  
+The database is containerised using Docker and PostgreSQL 15.
+
+### 1️⃣ Raw Ingestion Layer
+
+`price_paid`
+
+- Stores full transaction data (~1.9M rows)
+- Mirrors original dataset schema
+- Optimised with indexes
+
+### 2️⃣ Analytics Layer
+
+`price_paid_analytics`
+
+- Removes unnecessary columns
+- Engineers additional features:
+  - Extracted year
+  - Extracted month
+- Filters invalid records
+- Optimised for reporting
+
+### 3️⃣ Presentation Layer
+
+`monthly_avg_prices` (SQL View)
+
+Pre-aggregated monthly average prices:
+
+```sql
+SELECT
+    date_trunc('month', transfer_date) AS month,
+    AVG(price) AS avg_price
+FROM price_paid_analytics
+GROUP BY date_trunc('month', transfer_date)
+ORDER BY month;
+This ensures dashboards query only lightweight aggregated data (24 rows instead of millions).
+
+🚀 Backend API (FastAPI)
+
+A REST API exposes curated analytics data.
+Example endpoint: GET /monthly-average-prices
+
+Returns:
+[
+  {
+    "month": "2019-01-01",
+    "avg_price": 245000
+  }
+]
+
+The API does not expose raw transactional data directly.
+It queries the presentation-layer SQL view for performance and architectural separation.
+
+📊 Frontend Dashboard
+The project includes a Streamlit dashboard that:
+
+- Calls the FastAPI backend
+- Renders interactive line charts
+- Displays aggregated monthly pricing trends
+- Demonstrates full stack integration
+- Power BI integration is also supported by connecting either:
+- Directly to PostgreSQL
+ Or via the REST API
+
+🐳 Containerisation (Docker)
+
+PostgreSQL and pgAdmin are fully containerised using Docker Compose.
+This ensures:
+- Environment reproducibility
+- Simplified setup
+- Isolation from host machine dependencies
+- Production-style infrastructure management
+
+🛠️ Tech Stack
+
+- Python
+- PostgreSQL
+- Docker
+- FastAPI
+- SQLAlchemy
+- Pandas
+- Streamlit
+- pgAdmin
+
+⚙️ How To Run Locally
+
+1. Clone Repository
+git clone <repo-url>
+cd UK-housing-data-platform
+
+2. Start Database (Docker)
+docker compose up -d
+
+3. Load Data
+py scripts/load_price_paid.py
+
+4. Start API
+py -m uvicorn api.main:app --reload
+Visit:
+http://127.0.0.1:8000/docs
+
+5. Start Dashboard
+In a new terminal:
+py -m streamlit run dashboard/app.py
+Visit:
+http://localhost:8501
+
+📈 Performance
+
+~1.9 million transaction rows ingested
+- Monthly aggregation query executes in ~37ms
+- Dashboard queries lightweight aggregated view (24 rows)
+- Indexed columns ensure efficient filtering
+
+🔒 Data Exclusions
+
+The /data/raw folder is excluded from version control via .gitignore to avoid committing large datasets.
+
+🔮 Future Improvements
+
+- Parameterised API filters (year, town, property type)
+- Automated yearly ingestion pipeline
+- CI/CD workflow
+- Full Dockerised deployment (API + Dashboard)
+- Authentication layer for API
+- Cloud deployment (Azure / AWS / GCP)
+- Star schema modelling for BI optimisation
