@@ -147,7 +147,7 @@ Returns:
 The API does not expose raw transactional data directly.
 It queries the presentation-layer SQL view for performance and architectural separation.
 
-📊 Frontend Dashboard
+## 📊 Frontend Dashboard
 The project includes a Streamlit dashboard that:
 
 - Calls the FastAPI backend
@@ -158,7 +158,7 @@ The project includes a Streamlit dashboard that:
 - Directly to PostgreSQL
  Or via the REST API
 
-🐳 Containerisation (Docker)
+## 🐳 Containerisation (Docker)
 
 PostgreSQL and pgAdmin are fully containerised using Docker Compose.
 This ensures:
@@ -167,7 +167,7 @@ This ensures:
 - Isolation from host machine dependencies
 - Production-style infrastructure management
 
-🛠️ Tech Stack
+## 🛠️ Tech Stack
 
 - Python
 - PostgreSQL
@@ -178,29 +178,29 @@ This ensures:
 - Streamlit
 - pgAdmin
 
-⚙️ How To Run Locally
+## ⚙️ How To Run Locally
 
-1. Clone Repository
+### 1. Clone Repository
 ```bash
 git clone <repo-url>
 cd UK-housing-data-platform
 ```
-2. Start Database (Docker)
+### 2. Start Database (Docker)
 ```bash
 docker compose up -d
 ```
-3. Load Data
+### 3. Load Data
 ```bash
 py scripts/load_price_paid.py
 ```
-4. Start API
+### 4. Start API
 ```bash
 py -m uvicorn api.main:app --reload
 ```
 Visit:
 http://127.0.0.1:8000/docs
 
-5. Start Dashboard
+### 5. Start Dashboard
 In a new terminal:
 ```bash
 py -m streamlit run dashboard/app.py
@@ -208,18 +208,18 @@ py -m streamlit run dashboard/app.py
 Visit:
 http://localhost:8501
 
-📈 Performance
+## 📈 Performance
 
 ~1.9 million transaction rows ingested
 - Monthly aggregation query executes in ~37ms
 - Dashboard queries lightweight aggregated view (24 rows)
 - Indexed columns ensure efficient filtering
 
-🔒 Data Exclusions
+## 🔒 Data Exclusions
 
 The /data/raw folder is excluded from version control via .gitignore to avoid committing large datasets.
 
-🔮 Future Improvements
+## 🔮 Future Improvements
 
 - Parameterised API filters (year, town, property type)
 - Automated yearly ingestion pipeline
