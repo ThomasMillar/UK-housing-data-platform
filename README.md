@@ -24,8 +24,8 @@ The goal is to replicate how real-world data systems are built in production env
 
 ## 🏗️ Architecture Overview
 
-The platform follows a layered architecture separating ingestion, transformation, and presentation:
-↓
+### The platform follows a layered architecture separating ingestion, transformation, and presentation:
+```
 PostgreSQL (Docker)
 ↓
 Raw Ingestion Table (~1.9M rows)
@@ -37,7 +37,7 @@ Aggregated View (monthly averages)
 FastAPI Backend
 ↓
 Streamlit Dashboard / Power BI
-
+```
 
 This separation ensures:
 
