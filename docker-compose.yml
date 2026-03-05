@@ -6,25 +6,50 @@ services:
     container_name: uk_housing_postgres
     restart: always
     environment:
-      POSTGRES_USER: housing_user
-      POSTGRES_PASSWORD: housing_password
-      POSTGRES_DB: housing_db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  initdb:
+    image: postgres:15
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./db/init:/init
+    entrypoint: >
+      bash -lc "
+      echo 'Running schema & views…' &&
+      psql -h postgres -U ${POSTGRES_USER} -d ${POSTGRES_DB} -f /init/01_schema.sql &&
+      psql -h postgres -U ${POSTGRES_USER} -d ${POSTGRES_DB} -f /init/02_views.sql &&
+      echo 'Init scripts completed.'"
+    restart: "no"
 
   pgadmin:
     image: dpage/pgadmin4
     container_name: uk_housing_pgadmin
     restart: always
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
     ports:
-      - "5050:80"
+      - "${PGADMIN_PORT:-5050}:80"
     depends_on:
       - postgres
 
 volumes:
   postgres_data:
+
+  

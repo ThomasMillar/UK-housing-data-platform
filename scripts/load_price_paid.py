@@ -1,21 +1,34 @@
-import pandas as pd
-import psycopg2
-from sqlalchemy import create_engine
+import os
 from glob import glob
+import pandas as pd
+from sqlalchemy import create_engine, text
+from dotenv import load_dotenv
 
-# Database connection string
-engine = create_engine(
-    "postgresql://housing_user:housing_password@localhost:5432/housing_db"
-)
+# Load env vars from .env
+load_dotenv()
 
-# Load only 2019 & 2020 files
+DB_USER = os.getenv("POSTGRES_USER", "housing_user")
+DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "housing_password")
+DB_NAME = os.getenv("POSTGRES_DB", "housing_db")
+DB_HOST = os.getenv("POSTGRES_HOST", "localhost")  # 'localhost' for host-run
+DB_PORT = os.getenv("POSTGRES_PORT", "5432")
+TARGET_SCHEMA = os.getenv("TARGET_SCHEMA", "master_data")
+TARGET_TABLE = "price_paid"
+
+# Create engine
+engine = create_engine(f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
+
+# Ensure schema exists
+with engine.begin() as conn:
+    conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {TARGET_SCHEMA}"))
+
+# Gather files
 files = glob("data/raw/pp-2019-*.csv") + glob("data/raw/pp-2020-*.csv")
-
 print(f"Found {len(files)} files")
 
+# Load loop
 for file in files:
     print(f"Processing {file}")
-
     df = pd.read_csv(file, header=None)
 
     df.columns = [
@@ -26,23 +39,22 @@ for file in files:
         "category_type", "record_status"
     ]
 
-    # Convert types
-    df["transfer_date"] = pd.to_datetime(df["transfer_date"])
+    # Types
+    df["transfer_date"] = pd.to_datetime(df["transfer_date"], errors="coerce", utc=False).dt.date
     df["price"] = pd.to_numeric(df["price"], errors="coerce")
-
-    # Drop null prices just in case
     df = df.dropna(subset=["price"])
 
-    # Load in chunks
+    # Write to schema
     df.to_sql(
-        "price_paid",
+        TARGET_TABLE,
         engine,
         if_exists="append",
         index=False,
         method="multi",
-        chunksize=5000
+        chunksize=5000,
+        schema=TARGET_SCHEMA,
     )
 
-    print(f"Loaded {len(df)} rows")
+    print(f"Loaded {len(df)} rows into {TARGET_SCHEMA}.{TARGET_TABLE}")
 
 print("All done!")
