@@ -1,4 +1,23 @@
+version: "3.9"
+
 services:
+
+  # Download Container
+  downloader:
+    image: python:3.11-slim
+    container_name: uk_housing_downloader
+    working_dir: /app
+    volumes:
+      - ./scripts:/app/scripts
+      - ./data/raw:/app/data/raw
+    command: >
+      bash -lc "
+      pip install --no-cache-dir requests beautifulsoup4 &&
+      python scripts/download_monthly_data.py
+      "
+    restart: "no"
+
+  # Postgres Database
   postgres:
     image: postgres:15
     container_name: uk_housing_postgres
@@ -7,27 +26,31 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d  # runs 01_schema.sql + 02_views.sql on initialisation
+      - ./db/init:/docker-entrypoint-initdb.d
+      - ./data/raw:/data/raw
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 20
+    depends_on:
+      - downloader
 
-  # Conditionally load master data
+  # Data init and ETL
   data_init:
     image: python:3.11-slim
+    container_name: uk_housing_data_init
     depends_on:
       postgres:
         condition: service_healthy
     working_dir: /app
     environment:
       POSTGRES_HOST: postgres
-      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_PORT: ${POSTGRES_PORT}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -44,6 +67,43 @@ services:
       "
     restart: "no"
 
+  # FastAPI
+  api:
+    build: ./api
+    container_name: uk_housing_api
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SCHEMA: housing_data
+      TABLE: transactions
+    ports:
+      - "8000:8000"
+    depends_on:
+      data_init:
+        condition: service_completed_successfully
+
+  # StreamLit Dashboard
+  streamlit:
+    build: ./streamlit_app
+    container_name: uk_housing_streamlit
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SCHEMA: housing_data
+      TABLE: transactions
+    ports:
+      - "8501:8501"
+    depends_on:
+      api:
+        condition: service_started
+
+  # PgAdmin build
   pgadmin:
     image: dpage/pgadmin4
     container_name: uk_housing_pgadmin
