@@ -4,9 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
-# -----------------------
-# CONFIGURATION
-# -----------------------
+# Config
 
 PAGES = [
     "https://www.data.gov.uk/dataset/314f77b3-e702-4545-8bcb-9ef8262ea0fd/archived-price-paid-information-residential-property-1995-2017",
@@ -15,13 +13,11 @@ PAGES = [
 
 RAW_DIR = os.path.join("..", "data", "raw")
 
-# Only match part files: pp-YYYY-partX.csv
+# Only download part 1/2 files
 PART_PATTERN = re.compile(r"pp-(\d{4})-part\d+\.csv$", re.IGNORECASE)
 
 
-# -----------------------
-# SCRAPE LINKS
-# -----------------------
+# Links
 
 def get_part_links():
     all_links = set()
@@ -49,9 +45,7 @@ def get_part_links():
     return sorted(all_links)
 
 
-# -----------------------
-# DOWNLOAD FILES
-# -----------------------
+# Download Files
 
 def download_file(url):
     filename = url.split("/")[-1]
@@ -75,10 +69,6 @@ def download_file(url):
     except requests.exceptions.RequestException as e:
         print(f"Error downloading {filename}: {e}")
 
-
-# -----------------------
-# MAIN
-# -----------------------
 
 if __name__ == "__main__":
     links = get_part_links()
