@@ -87,8 +87,6 @@ The ingestion pipeline:
 - Supports incremental ingestion
 - Avoids reprocessing existing files
 
-This design reflects production ETL behaviour rather than simple CSV import.
-
 ---
 
 ## 🗄️ Database Architecture
@@ -99,7 +97,7 @@ The database is containerised using Docker and PostgreSQL 15.
 
 `price_paid`
 
-- Stores full transaction data (~1.9M rows)
+- Stores a sample transaction data (~1.9M row)
 - Mirrors original dataset schema
 - Optimised with indexes
 

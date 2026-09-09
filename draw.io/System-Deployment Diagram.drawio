@@ -1,0 +1,73 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.6.1 Chrome/142.0.7444.265 Electron/39.8.0 Safari/537.36" version="29.6.1">
+  <diagram name="Page-1" id="lvkYgulyTnSQXWFGQQoO">
+    <mxGraphModel dx="1426" dy="841" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="BKLiCs9VjoArvcSifge7-2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#717171);" value="Extract Script" vertex="1">
+          <mxGeometry height="30" width="130" x="310" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-5" edge="1" parent="1" source="BKLiCs9VjoArvcSifge7-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="BKLiCs9VjoArvcSifge7-4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#2F2F2F);" value="download_monthly_data.py" vertex="1">
+          <mxGeometry height="30" width="150" x="510" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-7" edge="1" parent="1" source="BKLiCs9VjoArvcSifge7-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="BKLiCs9VjoArvcSifge7-6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#2F2F2F);" value="load_price_paid.py" vertex="1">
+          <mxGeometry height="30" width="150" x="510" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-12" edge="1" parent="1" source="BKLiCs9VjoArvcSifge7-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="BKLiCs9VjoArvcSifge7-10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-6" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#2F2F2F);" value="create_tables.py" vertex="1">
+          <mxGeometry height="30" width="150" x="510" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-8" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#717171);" value="Transform Script" vertex="1">
+          <mxGeometry height="30" width="130" x="310" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-9" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#717171);" value="Load Script" vertex="1">
+          <mxGeometry height="30" width="130" x="310" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-22" edge="1" parent="1" source="BKLiCs9VjoArvcSifge7-10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="BKLiCs9VjoArvcSifge7-21">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-10" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#B3B3B3);" value="&lt;blockquote style=&quot;margin: 0 0 0 40px; border: none; padding: 0px;&quot;&gt;&lt;blockquote style=&quot;margin: 0 0 0 40px; border: none; padding: 0px;&quot;&gt;&lt;div style=&quot;text-align: justify;&quot;&gt;&lt;br&gt;&lt;/div&gt;&lt;/blockquote&gt;&lt;/blockquote&gt;" vertex="1">
+          <mxGeometry height="240" width="370" x="400" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-18" edge="1" parent="1" source="BKLiCs9VjoArvcSifge7-11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="BKLiCs9VjoArvcSifge7-13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-11" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=light-dark(#CCE5FF,#3F75AC);strokeColor=#36393d;" value="&lt;font color=&quot;#000000&quot;&gt;PostgresSQL&lt;/font&gt;&lt;div&gt;&lt;font color=&quot;#000000&quot;&gt;Port: 5432&lt;/font&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="70" width="140" x="520" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-19" edge="1" parent="1" source="BKLiCs9VjoArvcSifge7-13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="BKLiCs9VjoArvcSifge7-15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-13" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#66FF66);" value="&lt;font color=&quot;#000000&quot;&gt;pgAdmin&lt;/font&gt;" vertex="1">
+          <mxGeometry height="45" width="240" x="470" y="345" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-15" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#33FFFF);" value="&lt;font style=&quot;color: light-dark(rgb(0, 0, 0), rgb(0, 0, 0));&quot;&gt;FastAPI&lt;/font&gt;&lt;div&gt;&lt;font style=&quot;color: light-dark(rgb(0, 0, 0), rgb(0, 0, 0));&quot;&gt;Port: 8000&lt;/font&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="45" width="240" x="470" y="414" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-20" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#717171);" value="&lt;div&gt;Database Layer&lt;/div&gt;(Docker Platform)" vertex="1">
+          <mxGeometry height="45" width="130" x="220" y="345" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-21" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#A680B8);" value="&lt;div&gt;&lt;font style=&quot;color: light-dark(rgb(0, 0, 0), rgb(0, 0, 0));&quot;&gt;Streamlit Dashboard&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;color: light-dark(rgb(0, 0, 0), rgb(0, 0, 0));&quot;&gt;Port: 8501&lt;/font&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="45" width="240" x="465" y="520" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-25" edge="1" parent="1" source="BKLiCs9VjoArvcSifge7-23" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="BKLiCs9VjoArvcSifge7-21">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-23" parent="1" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;" value="User" vertex="1">
+          <mxGeometry height="160" width="110" x="530" y="610" as="geometry" />
+        </mxCell>
+        <mxCell id="BKLiCs9VjoArvcSifge7-26" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=light-dark(#FFFFFF,#717171);" value="Analytics Layer" vertex="1">
+          <mxGeometry height="30" width="130" x="280" y="527.5" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
