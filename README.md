@@ -1,228 +1,253 @@
 # UK Housing Data Platform
 
-An end-to-end full stack data engineering and analytics platform built using UK residential transaction data from HM Land Registry Price Paid Data.
+An end-to-end data engineering and analytics project built using HM Land Registry Price Paid Data for England and Wales.
 
-This project simulates a production-style data workflow — from raw public datasets to a containerised database, backend API, and interactive dashboard.
+The aim of this project was to build more than a dashboard. I wanted to work through the full data process: downloading public data, loading and cleaning it, modelling it in PostgreSQL, exposing it through an API, and building an interactive dashboard on top.
 
----
+**Live dashboard:** https://uk-housing-data-platform.streamlit.app/
 
-## 🎯 Project Goal
+## What the project covers
 
-To design and build a modern data platform that demonstrates:
+The platform processes residential property transactions from **2019 to 2025**, with just over **7 million cleaned transaction records** in the full dataset.
 
-- Automated ingestion of large public datasets
-- Structured database modelling
-- Clean transformation and analytics layering
-- REST API development
-- Containerised infrastructure (Docker)
-- Interactive dashboard visualisation
-- Separation of ingestion, analytics, and presentation layers
+The main parts are:
 
-The goal is to replicate how real-world data systems are built in production environments.
+- automated download of HM Land Registry CSV files
+- incremental ingestion into PostgreSQL
+- cleaning and transformation into a curated dataset
+- SQL views / serving tables for analytics
+- a FastAPI REST API
+- a multi-page Streamlit dashboard
+- Docker Compose for the local environment
+- Supabase PostgreSQL for the deployed serving layer
 
----
+## Architecture
 
-## 🏗️ Architecture Overview
-
-### The platform follows a layered architecture separating ingestion, transformation, and presentation:
-```
-PostgreSQL (Docker)
-↓
-Raw Ingestion Table (~1.9M rows)
-↓
-Analytics Table (cleaned + engineered features)
-↓
-Aggregated View (monthly averages)
-↓
-FastAPI Backend
-↓
-Streamlit Dashboard / Power BI
-```
-
-This separation ensures:
-
-- Reproducibility
-- Clear system boundaries
-- Performance optimisation
-- Production-style data engineering design
-
----
-
-## 📦 Data Source
-
-Dataset: HM Land Registry – UK Price Paid Data  
-Published via GOV.UK and data.gov.uk  
-
-The dataset contains residential property transaction records across England and Wales including:
-
-- Transaction price  
-- Transfer date  
-- Property type  
-- Town / district / county  
-- Postcode  
-
-For performance optimisation, selected years (2019–2020) are processed during development.
-
----
-
-## 📥 Data Ingestion Strategy
-
-### Real-World Challenges Encountered
-
-During development, several ingestion challenges were addressed:
-
-- Linked-data endpoints return metadata rather than raw CSV files.
-- Direct S3 access may return restricted (`403`) responses.
-- Some years are full CSV files (`pp-YYYY.csv`) while others are split (`pp-YYYY-partX.csv`).
-- Dataset pages contain mixed resource formats requiring filtering logic.
-- Large file sizes (~500k rows per file).
-
-### Implemented Solution
-
-The ingestion pipeline:
-
-- Downloads selected year-part CSV files
-- Stores files in `/data/raw`
-- Loads data into PostgreSQL via Python ETL scripts
-- Supports incremental ingestion
-- Avoids reprocessing existing files
-
----
-
-## 🗄️ Database Architecture
-
-The database is containerised using Docker and PostgreSQL 15.
-
-### 1️⃣ Raw Ingestion Layer
-
-`price_paid`
-
-- Stores a sample transaction data (~1.9M row)
-- Mirrors original dataset schema
-- Optimised with indexes
-
-### 2️⃣ Analytics Layer
-
-`price_paid_analytics`
-
-- Removes unnecessary columns
-- Engineers additional features:
-  - Extracted year
-  - Extracted month
-- Filters invalid records
-- Optimised for reporting
-
-### 3️⃣ Presentation Layer
-
-`monthly_avg_prices` (SQL View)
-
-Pre-aggregated monthly average prices:
-
-```sql
-SELECT
-    date_trunc('month', transfer_date) AS month,
-    AVG(price) AS avg_price
-FROM price_paid_analytics
-GROUP BY date_trunc('month', transfer_date)
-ORDER BY month;
+```text
+HM Land Registry Price Paid Data
+            |
+            v
+Python downloader
+            |
+            v
+data/raw CSV files
+            |
+            v
+master_data.price_paid
+            |
+            v
+housing_data.transactions
+            |
+            v
+Analytics / serving layer
+       /             \
+      v               v
+ FastAPI           Streamlit
+                     |
+                     v
+              Streamlit Cloud
 ```
 
-This ensures dashboards query only lightweight aggregated data (24 rows instead of millions).
+Locally, PostgreSQL, pgAdmin, the API and Streamlit can be run with Docker Compose.
 
-🚀 Backend API (FastAPI)
+For the public dashboard, the serving layer is hosted in Supabase and Streamlit connects using a read-only database role.
 
-A REST API exposes curated analytics data.
-Example endpoint: GET /monthly-average-prices
-```python
-Returns:
-[
-  {
-    "month": "2019-01-01",
-    "avg_price": 245000
-  }
-]
+## 1. Downloading the data
+
+`scripts/download_monthly_data.py` handles downloading the source files.
+
+One challenge with the Price Paid Data is that the available files are not always presented in exactly the same format. Some years have a complete yearly file while others may be split into parts.
+
+The downloader checks the HM Land Registry dataset page, finds the relevant CSV files for the selected year range and downloads them into:
+
+```text
+data/raw/
 ```
-The API does not expose raw transactional data directly.
-It queries the presentation-layer SQL view for performance and architectural separation.
 
-## 📊 Frontend Dashboard
-The project includes a Streamlit dashboard that:
+Existing files are skipped so the same data is not downloaded every time the pipeline runs.
 
-- Calls the FastAPI backend
-- Renders interactive line charts
-- Displays aggregated monthly pricing trends
-- Demonstrates full stack integration
-- Power BI integration is also supported by connecting either:
-- Directly to PostgreSQL
- Or via the REST API
+The year range is controlled through environment variables:
 
-## 🐳 Containerisation (Docker)
+```env
+START_YEAR=2019
+END_YEAR=2025
+```
 
-PostgreSQL and pgAdmin are fully containerised using Docker Compose.
-This ensures:
-- Environment reproducibility
-- Simplified setup
-- Isolation from host machine dependencies
-- Production-style infrastructure management
+Raw CSV files are excluded from Git because they are large and can always be downloaded again from the source.
 
-## 🛠️ Tech Stack
+## 2. Ingestion
 
-- Python
-- PostgreSQL
-- Docker
-- FastAPI
-- SQLAlchemy
-- Pandas
-- Streamlit
-- pgAdmin
+`scripts/load_price_paid.py` loads the downloaded files into PostgreSQL.
 
-## ⚙️ How To Run Locally
+The raw Land Registry structure is kept in:
 
-### 1. Clone Repository
+```text
+master_data.price_paid
+```
+
+The loader reads large CSV files in chunks rather than trying to load the whole file into memory at once.
+
+I also created an ingestion log so previously processed files can be skipped. This makes the process incremental and means restarting the pipeline does not automatically reload everything.
+
+Transactions are loaded using an upsert approach, so an existing transaction can be updated rather than duplicated.
+
+## 3. Cleaning and transformation
+
+`scripts/create_tables.py` moves the data from the raw ingestion layer into the curated model:
+
+```text
+housing_data.transactions
+```
+
+This layer is used to keep the cleaned transaction data separate from the original source table.
+
+The pipeline uses the transaction ID as the key and tracks changes using timestamps. New or changed records can therefore be processed without rebuilding the entire dataset every time.
+
+Materialized views are also refreshed after the main data load so reporting data stays in sync.
+
+This gives the database a simple separation between:
+
+```text
+master_data  -> raw/source data
+housing_data -> cleaned and curated data
+serving      -> data prepared for applications
+```
+
+## 4. Serving layer and performance
+
+The full curated dataset contains **7,014,855 non-deleted transactions**.
+
+The cloud database also contains a smaller serving table used by the public dashboard:
+
+```text
+serving.transactions_explorer
+```
+
+This is a deterministic sample of roughly **2% of the full dataset**. The same transaction will always either be included or excluded because the sample is based on a hash of the transaction ID.
+
+I introduced this after testing the dashboard against the full dataset. Queries such as percentiles, medians and multiple interactive filters were too slow for a small public cloud deployment.
+
+The full dataset is still retained in the serving layer, while the interactive dashboard uses the sample for faster filtering.
+
+Counts and total values shown in the dashboard are scaled estimates. Measures such as median price, average price and percentiles are calculated from the sample and should therefore be treated as estimates.
+
+This was a deliberate trade-off between query speed, hosting cost and analytical detail.
+
+## 5. FastAPI
+
+The project includes a FastAPI service in:
+
+```text
+api/main.py
+```
+
+The API provides another way to access the curated data and demonstrates how the database can be separated from applications that consume it.
+
+Example endpoints include:
+
+```text
+GET /trends/monthly-prices
+GET /geo/county
+GET /geo/district
+GET /property-mix
+GET /stats/overview
+GET /transactions
+```
+
+The transaction endpoint supports filters such as date, county, district, town, property type and price range, together with pagination.
+
+There is also an admin endpoint for refreshing materialized views. It is protected using an API key rather than being publicly available without authentication.
+
+FastAPI automatically provides interactive API documentation at:
+
+```text
+http://localhost:8000/docs
+```
+
+## 6. Streamlit dashboard
+
+The dashboard is built as a multi-page Streamlit application.
+
+It includes:
+
+- Overview
+- Price Trends
+- Geography
+- Property Mix
+- Price Distribution
+- COVID-Era Analysis
+- Data Explorer
+
+Users can filter the dashboard by date, property type and county.
+
+The Data Explorer also includes pagination so records can be browsed without loading the full result set into the browser.
+
+The deployed app connects to Supabase using a dedicated read-only PostgreSQL login. Database credentials are stored in Streamlit's secret management rather than in the repository.
+
+## Running locally
+
+Create a local `.env` file with the required PostgreSQL settings, then start the stack:
+
 ```bash
-git clone <repo-url>
-cd UK-housing-data-platform
+docker compose up -d --build
 ```
-### 2. Start Database (Docker)
-```bash
-docker compose up -d
-```
-### 3. Load Data
-```bash
-py scripts/load_price_paid.py
-```
-### 4. Start API
-```bash
-py -m uvicorn api.main:app --reload
-```
-Visit:
-http://127.0.0.1:8000/docs
 
-### 5. Start Dashboard
-In a new terminal:
-```bash
-py -m streamlit run dashboard/app.py
+The main services are:
+
+```text
+PostgreSQL   database
+pgAdmin      database management
+FastAPI      backend API
+Streamlit    analytics dashboard
 ```
-Visit:
+
+To run the downloader manually:
+
+```bash
+python scripts/download_monthly_data.py
+```
+
+To run the loader manually:
+
+```bash
+python scripts/load_price_paid.py
+```
+
+The API documentation is available at:
+
+```text
+http://localhost:8000/docs
+```
+
+The Streamlit dashboard is available at:
+
+```text
 http://localhost:8501
+```
 
-## 📈 Performance
+## Project structure
 
-~1.9 million transaction rows ingested
-- Monthly aggregation query executes in ~37ms
-- Dashboard queries lightweight aggregated view (24 rows)
-- Indexed columns ensure efficient filtering
+```text
+UK-housing-data-platform/
+├── api/                 # FastAPI application
+├── db/                  # Database setup
+├── scripts/             # Download, ingestion and transformation scripts
+├── streamlit_app/       # Streamlit dashboard
+│   ├── Home.py
+│   ├── lib.py
+│   └── pages/
+├── docker-compose.yml
+└── README.md
+```
 
-## 🔒 Data Exclusions
+## Tech stack
 
-The /data/raw folder is excluded from version control via .gitignore to avoid committing large datasets.
+**Python, PostgreSQL, Pandas, SQLAlchemy, FastAPI, Streamlit, Plotly, Docker, Supabase and pgAdmin**
 
-## 🔮 Future Improvements
+## What I learned
 
-- Parameterised API filters (year, town, property type)
-- Automated yearly ingestion pipeline
-- CI/CD workflow
-- Full Dockerised deployment (API + Dashboard)
-- Authentication layer for API
-- Cloud deployment (Azure / AWS / GCP)
-- Star schema modelling for BI optimisation
+The main thing I wanted from this project was experience working across the full data lifecycle rather than only analysing an already prepared dataset.
+
+It gave me practical experience with large CSV ingestion, incremental loads, database modelling, SQL performance, API development, application deployment and handling the difference between a local development database and a smaller public cloud environment.
+
+One of the most useful parts was seeing how design decisions change as the amount of data grows. Queries that are simple on a small dataset can become expensive across millions of rows, which led me to introduce indexes, caching and a separate serving layer for the public dashboard.
