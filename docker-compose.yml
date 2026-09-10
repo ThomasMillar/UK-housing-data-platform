@@ -124,14 +124,12 @@ services:
     container_name: uk_housing_streamlit
 
     environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-
-      SCHEMA: housing_data
-      TABLE: transactions
+      APP_POSTGRES_HOST: ${APP_POSTGRES_HOST}
+      APP_POSTGRES_PORT: ${APP_POSTGRES_PORT}
+      APP_POSTGRES_DB: ${APP_POSTGRES_DB}
+      APP_POSTGRES_USER: ${APP_POSTGRES_USER}
+      APP_POSTGRES_PASSWORD: ${APP_POSTGRES_PASSWORD}
+      APP_POSTGRES_SSLMODE: ${APP_POSTGRES_SSLMODE}
 
     ports:
       - "8501:8501"
