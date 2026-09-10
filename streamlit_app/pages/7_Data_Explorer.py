@@ -131,8 +131,8 @@ col3.metric("Rows shown", f"{len(df):,}")
 
 st.caption(
     f"Showing rows {start_row:,}–{end_row:,}. "
-    "This explorer uses a deterministic sample for fast public browsing; "
-    "dashboard analytics use the full transaction dataset."
+    "This explorer uses the same deterministic sample used for interactive dashboard "
+    "analytics. The full transaction dataset remains stored in the serving layer."
 )
 
 st.dataframe(

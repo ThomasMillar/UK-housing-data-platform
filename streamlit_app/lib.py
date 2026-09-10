@@ -17,8 +17,9 @@ PROPERTY_TYPE_MAP = {
     "O": "Other",
 }
 
-CORE_TABLE = "serving.transactions_core"
+ANALYTICS_TABLE = "serving.transactions_explorer"
 LOCATION_TABLE = "serving.location_dim"
+META_TABLE = "serving.dataset_meta"
 
 
 def get_config_value(secret_name, app_env_name, local_env_name, default=None):
@@ -74,49 +75,61 @@ def get_engine():
 
 
 def from_clause():
-    return f"""
-        {CORE_TABLE} t
-        JOIN {LOCATION_TABLE} l
-          ON t.location_id = l.location_id
-    """
+    return f"{ANALYTICS_TABLE} t"
 
 
 def fqtn():
     return from_clause()
 
 
-@st.cache_data(show_spinner=False, ttl=600)
-def load_date_range():
+@st.cache_data(show_spinner=False, ttl=3600)
+def load_dataset_meta():
     query = f"""
-        SELECT MIN(t.transfer_date) AS min_d, MAX(t.transfer_date) AS max_d
-        FROM {CORE_TABLE} t
+        SELECT min_date, max_date, total_rows, sample_rows
+        FROM {META_TABLE}
+        WHERE id = 1
     """
 
     with get_engine().begin() as conn:
         return pd.read_sql(query, conn).iloc[0].to_dict()
 
 
-@st.cache_data(show_spinner=False, ttl=600)
-def load_filter_values():
-    type_query = f"""
-        SELECT DISTINCT t.property_type
-        FROM {CORE_TABLE} t
-        WHERE t.property_type IS NOT NULL
-        ORDER BY t.property_type
-    """
+def sample_weight():
+    meta = load_dataset_meta()
+    return float(meta["total_rows"]) / float(meta["sample_rows"])
 
+
+def scale_count(value):
+    if value is None or pd.isna(value):
+        return 0
+    return round(float(value) * sample_weight())
+
+
+def scale_value(value):
+    if value is None or pd.isna(value):
+        return None
+    return round(float(value) * sample_weight())
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def load_date_range():
+    meta = load_dataset_meta()
+    return {"min_d": meta["min_date"], "max_d": meta["max_date"]}
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def load_filter_values():
     county_query = f"""
-        SELECT DISTINCT l.county
-        FROM {LOCATION_TABLE} l
-        WHERE l.county IS NOT NULL
-        ORDER BY l.county
+        SELECT DISTINCT county
+        FROM {LOCATION_TABLE}
+        WHERE county IS NOT NULL
+        ORDER BY county
     """
 
     with get_engine().begin() as conn:
-        types = pd.read_sql(type_query, conn)["property_type"].dropna().tolist()
         counties = pd.read_sql(county_query, conn)["county"].dropna().tolist()
 
-    return types, counties
+    return list(PROPERTY_TYPE_MAP.keys()), counties
 
 
 def map_property_type(code):
@@ -154,6 +167,11 @@ def sidebar_filters():
         if label in selected_types
     ]
 
+    st.sidebar.caption(
+        "Interactive analytics use a deterministic ~2% sample for responsive filtering. "
+        "Counts and total values are scaled estimates."
+    )
+
     return start, end, type_codes, selected_counties
 
 
@@ -169,31 +187,35 @@ def where_clause(start, end, type_codes, counties):
         params["pt"] = type_codes
 
     if counties:
-        clauses.append("l.county = ANY(:cty)")
+        clauses.append("t.county = ANY(:cty)")
         params["cty"] = counties
 
     return " AND ".join(clauses), params
 
 
-@st.cache_data(show_spinner=True, ttl=600)
+@st.cache_data(show_spinner=True, ttl=1800)
 def load_kpis(start, end, type_codes, counties):
     wc, params = where_clause(start, end, type_codes, counties)
 
     query = f"""
         SELECT
-            COUNT(*)::BIGINT AS n_transactions,
+            COUNT(*)::BIGINT AS sample_n,
             PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY t.price) AS median_price,
             AVG(t.price) AS avg_price,
-            SUM(t.price)::BIGINT AS total_value
+            SUM(t.price)::BIGINT AS sample_total_value
         FROM {from_clause()}
         WHERE {wc}
     """
 
     with get_engine().begin() as conn:
-        return pd.read_sql(text(query), conn, params=params).iloc[0].to_dict()
+        result = pd.read_sql(text(query), conn, params=params).iloc[0].to_dict()
+
+    result["n_transactions"] = scale_count(result.pop("sample_n"))
+    result["total_value"] = scale_value(result.pop("sample_total_value"))
+    return result
 
 
-@st.cache_data(show_spinner=True, ttl=600)
+@st.cache_data(show_spinner=True, ttl=1800)
 def load_time_series(start, end, type_codes, counties, freq="M"):
     wc, params = where_clause(start, end, type_codes, counties)
     date_trunc = {"D": "day", "M": "month", "Q": "quarter", "Y": "year"}[freq]
@@ -203,7 +225,7 @@ def load_time_series(start, end, type_codes, counties, freq="M"):
             date_trunc('{date_trunc}', t.transfer_date)::date AS period,
             PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY t.price) AS median_price,
             AVG(t.price) AS avg_price,
-            COUNT(*)::BIGINT AS n_transactions
+            COUNT(*)::BIGINT AS sample_n
         FROM {from_clause()}
         WHERE {wc}
         GROUP BY 1
@@ -214,6 +236,7 @@ def load_time_series(start, end, type_codes, counties, freq="M"):
         df = pd.read_sql(text(query), conn, params=params)
 
     df["period"] = pd.to_datetime(df["period"])
+    df["n_transactions"] = (df.pop("sample_n") * sample_weight()).round().astype("int64")
     return df
 
 
@@ -226,48 +249,50 @@ def add_monthly_metrics(df):
     return df
 
 
-@st.cache_data(show_spinner=True, ttl=600)
+@st.cache_data(show_spinner=True, ttl=1800)
 def load_property_mix(start, end, type_codes, counties):
     wc, params = where_clause(start, end, type_codes, counties)
 
     query = f"""
         SELECT
             t.property_type,
-            COUNT(*)::BIGINT AS n,
+            COUNT(*)::BIGINT AS sample_n,
             PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY t.price) AS median_price,
             AVG(t.price) AS avg_price
         FROM {from_clause()}
         WHERE {wc}
         GROUP BY t.property_type
-        ORDER BY n DESC
+        ORDER BY sample_n DESC
     """
 
     with get_engine().begin() as conn:
         df = pd.read_sql(text(query), conn, params=params)
 
+    df["n"] = (df.pop("sample_n") * sample_weight()).round().astype("int64")
     df["Property"] = df["property_type"].map(map_property_type)
     return df
 
 
-@st.cache_data(show_spinner=True, ttl=600)
+@st.cache_data(show_spinner=True, ttl=1800)
 def load_build_status_summary(start, end, type_codes, counties):
     wc, params = where_clause(start, end, type_codes, counties)
 
     query = f"""
         SELECT
             t.old_new,
-            COUNT(*)::BIGINT AS n,
+            COUNT(*)::BIGINT AS sample_n,
             PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY t.price) AS median_price
         FROM {from_clause()}
         WHERE {wc}
           AND t.old_new IN ('Y', 'N')
         GROUP BY t.old_new
-        ORDER BY n DESC
+        ORDER BY sample_n DESC
     """
 
     with get_engine().begin() as conn:
         df = pd.read_sql(text(query), conn, params=params)
 
+    df["n"] = (df.pop("sample_n") * sample_weight()).round().astype("int64")
     df["build_status"] = df["old_new"].map({
         "Y": "New build",
         "N": "Existing property",
@@ -276,25 +301,26 @@ def load_build_status_summary(start, end, type_codes, counties):
     return df
 
 
-@st.cache_data(show_spinner=True, ttl=600)
+@st.cache_data(show_spinner=True, ttl=1800)
 def load_tenure_summary(start, end, type_codes, counties):
     wc, params = where_clause(start, end, type_codes, counties)
 
     query = f"""
         SELECT
             t.duration,
-            COUNT(*)::BIGINT AS n,
+            COUNT(*)::BIGINT AS sample_n,
             PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY t.price) AS median_price
         FROM {from_clause()}
         WHERE {wc}
           AND t.duration IN ('F', 'L')
         GROUP BY t.duration
-        ORDER BY n DESC
+        ORDER BY sample_n DESC
     """
 
     with get_engine().begin() as conn:
         df = pd.read_sql(text(query), conn, params=params)
 
+    df["n"] = (df.pop("sample_n") * sample_weight()).round().astype("int64")
     df["tenure"] = df["duration"].map({
         "F": "Freehold",
         "L": "Leasehold",
@@ -303,32 +329,35 @@ def load_tenure_summary(start, end, type_codes, counties):
     return df
 
 
-@st.cache_data(show_spinner=True, ttl=600)
+@st.cache_data(show_spinner=True, ttl=1800)
 def load_geo_summary(start, end, type_codes, counties, geo="county"):
     geo_columns = {
-        "county": "l.county",
-        "district": "l.district",
-        "town_city": "l.town_city",
+        "county": "t.county",
+        "district": "t.district",
+        "town_city": "t.town_city",
     }
 
-    geo_column = geo_columns.get(geo, "l.county")
+    geo_column = geo_columns.get(geo, "t.county")
     wc, params = where_clause(start, end, type_codes, counties)
 
     query = f"""
         SELECT
             {geo_column} AS region,
-            COUNT(*)::BIGINT AS n,
+            COUNT(*)::BIGINT AS sample_n,
             PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY t.price) AS median_price,
             AVG(t.price) AS avg_price
         FROM {from_clause()}
         WHERE {wc}
           AND {geo_column} IS NOT NULL
         GROUP BY {geo_column}
-        ORDER BY n DESC
+        ORDER BY sample_n DESC
     """
 
     with get_engine().begin() as conn:
-        return pd.read_sql(text(query), conn, params=params)
+        df = pd.read_sql(text(query), conn, params=params)
+
+    df["n"] = (df.pop("sample_n") * sample_weight()).round().astype("int64")
+    return df
 
 
 def load_geo_movers(
