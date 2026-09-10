@@ -1,11 +1,14 @@
-import streamlit as st
 import plotly.express as px
+import streamlit as st
 
 from lib import (
-    sidebar_filters,
-    load_property_mix,
     format_currency,
     format_number,
+    load_build_status_summary,
+    load_property_mix,
+    load_tenure_summary,
+    pct_change,
+    sidebar_filters,
     style_figure,
 )
 
@@ -16,283 +19,164 @@ st.set_page_config(
     layout="wide",
 )
 
-
 st.title("🏘️ Property Mix")
-
 st.write(
-    "Understand which property types make up the market "
-    "and how their transaction prices differ."
+    "Compare property types, new and existing homes, and freehold versus leasehold sales."
 )
-
-
-# FILTERS
 
 start, end, type_codes, counties = sidebar_filters()
 
-
-# LOAD DATA
-
-df = load_property_mix(
-    start,
-    end,
-    type_codes,
-    counties,
-)
-
+df = load_property_mix(start, end, type_codes, counties)
 
 if df.empty:
-    st.warning(
-        "No data is available for the selected filters."
-    )
+    st.warning("No data is available for the selected filters.")
     st.stop()
 
-
-# CALCULATE MARKET SHARE
-
 total_transactions = df["n"].sum()
+df["share"] = df["n"] / total_transactions * 100
 
-
-df["share"] = (
-    df["n"]
-    / total_transactions
-    * 100
-)
-
-
-# SUMMARY
-
-highest_price = df.loc[
-    df["median_price"].idxmax()
-]
-
-
-highest_volume = df.loc[
-    df["n"].idxmax()
-]
-
+highest_volume = df.loc[df["n"].idxmax()]
+highest_price = df.loc[df["median_price"].idxmax()]
 
 col1, col2, col3 = st.columns(3)
 
-
 with col1:
-    st.metric(
-        "Most common property type",
-        highest_volume["Property"],
-    )
-
+    st.metric("Most common property type", highest_volume["Property"])
 
 with col2:
     st.metric(
-        "Highest median price",
+        "Highest-priced property type",
         highest_price["Property"],
+        help=f"Median price: {format_currency(highest_price['median_price'])}",
     )
-
 
 with col3:
-    st.metric(
-        "Total transactions",
-        format_number(
-            total_transactions
-        ),
-    )
-
-
-# CHARTS
+    st.metric("Transactions", format_number(total_transactions))
 
 st.markdown("---")
 
-
 left, right = st.columns(2)
 
-
 with left:
+    volume_df = df.sort_values("n")
 
-    st.subheader("Transactions by property type")
-
-    mix_df = (
-        df
-        .sort_values(
-            "n",
-            ascending=True,
-        )
-    )
-
-    fig_mix = px.bar(
-        mix_df,
+    fig_volume = px.bar(
+        volume_df,
         x="n",
         y="Property",
         orientation="h",
-        title="Transaction Volume",
-        labels={
-            "n": "Transactions",
-            "Property": "Property type",
-        },
+        title="Transactions by property type",
+        labels={"n": "Transactions", "Property": "Property type"},
         text="n",
     )
 
-    fig_mix.update_traces(
-        texttemplate="%{text:,.0f}",
-        textposition="outside",
-    )
-
-    fig_mix = style_figure(
-        fig_mix,
-        height=450,
-    )
-
-    st.plotly_chart(
-        fig_mix,
-        use_container_width=True,
-    )
-
+    fig_volume.update_traces(texttemplate="%{text:,.0f}", textposition="inside")
+    fig_volume = style_figure(fig_volume, 425)
+    st.plotly_chart(fig_volume, use_container_width=True)
 
 with right:
-
-    st.subheader("Median price by property type")
-
-    price_df = (
-        df
-        .sort_values(
-            "median_price",
-            ascending=True,
-        )
-    )
+    price_df = df.sort_values("median_price")
 
     fig_price = px.bar(
         price_df,
         x="median_price",
         y="Property",
         orientation="h",
-        title="Median Transaction Price",
-        labels={
-            "median_price": "Median price (£)",
-            "Property": "Property type",
-        },
+        title="Median price by property type",
+        labels={"median_price": "Median price (£)", "Property": "Property type"},
         text="median_price",
     )
 
-    fig_price.update_traces(
-        texttemplate="£%{text:,.0f}",
-        textposition="outside",
-    )
-
-    fig_price = style_figure(
-        fig_price,
-        height=450,
-    )
-
-    st.plotly_chart(
-        fig_price,
-        use_container_width=True,
-    )
-
-
-# MARKET SHARE
+    fig_price.update_traces(texttemplate="£%{text:,.0f}", textposition="inside")
+    fig_price = style_figure(fig_price, 425)
+    st.plotly_chart(fig_price, use_container_width=True)
 
 st.markdown("---")
+st.subheader("New build vs existing properties")
 
-st.subheader("Market share")
+build_df = load_build_status_summary(start, end, type_codes, counties)
 
+if not build_df.empty:
+    new_build = build_df[build_df["old_new"] == "Y"]
+    existing = build_df[build_df["old_new"] == "N"]
 
-share_df = (
-    df[
-        [
-            "Property",
-            "share",
-        ]
-    ]
-    .sort_values(
-        "share",
-        ascending=False,
+    new_price = new_build["median_price"].iloc[0] if not new_build.empty else None
+    existing_price = existing["median_price"].iloc[0] if not existing.empty else None
+    new_build_difference = pct_change(existing_price, new_price)
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric("New-build median", format_currency(new_price))
+
+    with col2:
+        st.metric("Existing-property median", format_currency(existing_price))
+
+    with col3:
+        value = (
+            f"{new_build_difference:+.1f}%"
+            if new_build_difference is not None
+            else "—"
+        )
+        st.metric("New-build price difference", value)
+
+    fig_build = px.bar(
+        build_df,
+        x="build_status",
+        y="median_price",
+        labels={"build_status": "", "median_price": "Median price (£)"},
+        text="median_price",
     )
-)
 
-
-fig_share = px.bar(
-    share_df,
-    x="Property",
-    y="share",
-    title="Share of Recorded Transactions",
-    labels={
-        "Property": "Property type",
-        "share": "Share of transactions (%)",
-    },
-    text="share",
-)
-
-
-fig_share.update_traces(
-    texttemplate="%{text:.1f}%",
-    textposition="outside",
-)
-
-
-fig_share.update_yaxes(
-    ticksuffix="%",
-)
-
-
-fig_share = style_figure(
-    fig_share,
-    height=400,
-)
-
-
-st.plotly_chart(
-    fig_share,
-    use_container_width=True,
-)
-
-
-# COMPARISON TABLE
+    fig_build.update_traces(texttemplate="£%{text:,.0f}", textposition="inside")
+    fig_build.update_yaxes(tickprefix="£", tickformat=",")
+    fig_build = style_figure(fig_build, 350)
+    st.plotly_chart(fig_build, use_container_width=True)
 
 st.markdown("---")
+st.subheader("Freehold vs leasehold")
 
-st.subheader("📊 Property type comparison")
+tenure_df = load_tenure_summary(start, end, type_codes, counties)
 
+if not tenure_df.empty:
+    freehold = tenure_df[tenure_df["duration"] == "F"]
+    leasehold = tenure_df[tenure_df["duration"] == "L"]
 
-comparison = df[
-    [
-        "Property",
-        "n",
-        "share",
-        "median_price",
-    ]
-].copy()
+    freehold_price = freehold["median_price"].iloc[0] if not freehold.empty else None
+    leasehold_price = leasehold["median_price"].iloc[0] if not leasehold.empty else None
+    tenure_difference = pct_change(leasehold_price, freehold_price)
 
+    col1, col2, col3 = st.columns(3)
 
-comparison["Transactions"] = (
-    comparison["n"]
-    .apply(format_number)
-)
+    with col1:
+        st.metric("Freehold median", format_currency(freehold_price))
 
+    with col2:
+        st.metric("Leasehold median", format_currency(leasehold_price))
 
-comparison["Market Share"] = (
-    comparison["share"]
-    .map(
-        lambda value: f"{value:.1f}%"
+    with col3:
+        value = (
+            f"{tenure_difference:+.1f}%"
+            if tenure_difference is not None
+            else "—"
+        )
+        st.metric("Freehold price difference", value)
+
+    fig_tenure = px.bar(
+        tenure_df,
+        x="tenure",
+        y="median_price",
+        labels={"tenure": "", "median_price": "Median price (£)"},
+        text="median_price",
     )
-)
 
+    fig_tenure.update_traces(texttemplate="£%{text:,.0f}", textposition="inside")
+    fig_tenure.update_yaxes(tickprefix="£", tickformat=",")
+    fig_tenure = style_figure(fig_tenure, 350)
+    st.plotly_chart(fig_tenure, use_container_width=True)
 
-comparison["Median Price"] = (
-    comparison["median_price"]
-    .apply(format_currency)
-)
-
-
-comparison = comparison[
-    [
-        "Property",
-        "Transactions",
-        "Market Share",
-        "Median Price",
-    ]
-]
-
-
-st.dataframe(
-    comparison,
-    use_container_width=True,
-    hide_index=True,
-)
+    st.caption(
+        "This is a descriptive comparison. Property type differs substantially "
+        "between freehold and leasehold transactions, so the gap should not be "
+        "interpreted as the effect of tenure alone."
+    )

@@ -1,13 +1,15 @@
-import streamlit as st
+import pandas as pd
 import plotly.express as px
+import streamlit as st
 
 from lib import (
-    sidebar_filters,
-    load_kpis,
-    load_time_series,
+    add_monthly_metrics,
     format_currency,
     format_number,
-    pct_change,
+    load_date_range,
+    load_kpis,
+    load_time_series,
+    sidebar_filters,
     style_figure,
 )
 
@@ -18,275 +20,144 @@ st.set_page_config(
     layout="wide",
 )
 
-
 st.title("📈 Market Overview")
-
 st.caption(
-    "Explore housing market activity across England and Wales. "
-    "Use the sidebar to filter the analysis."
+    "A high-level view of prices and transaction activity across England and Wales."
 )
-
-# FILTERS
 
 start, end, type_codes, counties = sidebar_filters()
 
+kpis = load_kpis(start, end, type_codes, counties)
 
-# LOAD DATA
+# Pull an extra year so YoY calculations still work near the start of the selected range.
+history_start = (pd.Timestamp(start) - pd.DateOffset(years=1)).date()
+monthly = load_time_series(history_start, end, type_codes, counties, freq="M")
+monthly = add_monthly_metrics(monthly)
+monthly_display = monthly[monthly["period"] >= pd.Timestamp(start)].copy()
 
-kpis = load_kpis(
-    start,
-    end,
-    type_codes,
-    counties,
-)
-
-ts = load_time_series(
-    start,
-    end,
-    type_codes,
-    counties,
-    freq="M",
-)
-
-
-if ts.empty:
-    st.warning(
-        "No data is available for the selected filters."
-    )
+if monthly_display.empty:
+    st.warning("No data is available for the selected filters.")
     st.stop()
 
-
-# PREPARE SUMMARY VALUES
-
-latest = ts.iloc[-1]
-first = ts.iloc[0]
-
-
-price_change = pct_change(
-    first["median_price"],
-    latest["median_price"],
+latest = monthly_display.iloc[-1]
+yoy_rows = monthly_display.dropna(
+    subset=["median_price_yoy_pct", "transactions_yoy_pct"]
 )
 
-
-volume_change = pct_change(
-    first["n_transactions"],
-    latest["n_transactions"],
-)
-
-
-# KPI CARDS
+latest_yoy = yoy_rows.iloc[-1] if not yoy_rows.empty else None
 
 st.subheader("Market snapshot")
 
-
 col1, col2, col3, col4 = st.columns(4)
 
-
 with col1:
-    st.metric(
-        "Transactions",
-        format_number(
-            kpis["n_transactions"]
-        ),
-    )
-
+    st.metric("Transactions", format_number(kpis["n_transactions"]))
 
 with col2:
-    st.metric(
-        "Median price",
-        format_currency(
-            kpis["median_price"]
-        ),
-    )
-
+    st.metric("Median price", format_currency(kpis["median_price"]))
 
 with col3:
-    st.metric(
-        "Average price",
-        format_currency(
-            kpis["avg_price"]
-        ),
+    value = (
+        f"{latest_yoy['median_price_yoy_pct']:+.1f}%"
+        if latest_yoy is not None
+        else "—"
     )
-
+    st.metric("Latest YoY price change", value)
 
 with col4:
-    st.metric(
-        "Total transaction value",
-        format_currency(
-            kpis["total_value"]
-        ),
+    value = (
+        f"{latest_yoy['transactions_yoy_pct']:+.1f}%"
+        if latest_yoy is not None
+        else "—"
     )
+    st.metric("Latest YoY transaction change", value)
 
-
-# KEY FINDINGS
+st.caption(
+    f"Average transaction price: {format_currency(kpis['avg_price'])} · "
+    f"Total transaction value: {format_currency(kpis['total_value'])}"
+)
 
 st.markdown("---")
 st.subheader("🔎 Key findings")
 
-
 insight1, insight2, insight3 = st.columns(3)
 
-
 with insight1:
-
-    if price_change is not None:
-
-        direction = (
-            "increase"
-            if price_change >= 0
-            else "decrease"
-        )
-
-        st.metric(
-            "Median price change",
-            f"{price_change:+.1f}%",
-        )
-
-        st.caption(
-            f"Median transaction price changed by "
-            f"{abs(price_change):.1f}% between the first "
-            f"and latest available periods."
-        )
-
-    else:
+    if latest_yoy is not None:
+        change = latest_yoy["median_price_yoy_pct"]
+        direction = "higher" if change >= 0 else "lower"
 
         st.info(
-            "Not enough data to calculate price change."
+            f"Median prices were **{abs(change):.1f}% {direction}** than "
+            f"the same month a year earlier."
         )
-
+    else:
+        st.info("Select at least one year of comparable data to calculate YoY change.")
 
 with insight2:
-
-    if volume_change is not None:
-
-        direction = (
-            "increase"
-            if volume_change >= 0
-            else "decrease"
-        )
-
-        st.metric(
-            "Transaction volume change",
-            f"{volume_change:+.1f}%",
-        )
-
-        st.caption(
-            f"Transaction volume changed by "
-            f"{abs(volume_change):.1f}% between the first "
-            f"and latest available periods."
-        )
-
-    else:
+    if latest_yoy is not None:
+        change = latest_yoy["transactions_yoy_pct"]
+        direction = "higher" if change >= 0 else "lower"
 
         st.info(
-            "Not enough data to calculate volume change."
+            f"Transaction volume was **{abs(change):.1f}% {direction}** "
+            f"than the same month a year earlier."
         )
-
+    else:
+        st.info("Not enough data is available to compare transaction volumes year on year.")
 
 with insight3:
+    if kpis["median_price"]:
+        mean_gap = ((kpis["avg_price"] - kpis["median_price"]) / kpis["median_price"]) * 100
 
-    st.metric(
-        "Latest monthly median",
-        format_currency(
-            latest["median_price"]
-        ),
-    )
-
-    latest_period = latest["period"]
-
-    st.caption(
-        "Latest available period: "
-        f"{latest_period.strftime('%B %Y')}"
-    )
-
-
-# MEDIAN PRICE TREND
+        st.info(
+            f"The average price is **{mean_gap:.1f}% above the median**, "
+            "showing the effect of higher-value transactions."
+        )
 
 st.markdown("---")
-
 st.subheader("Median transaction price")
 
+price_df = monthly_display.rename(columns={
+    "median_price": "Monthly median",
+    "median_price_12m_avg": "12-month rolling average",
+})
 
 fig_price = px.line(
-    ts,
+    price_df,
     x="period",
-    y="median_price",
-    markers=True,
-    title="Median Transaction Price Over Time",
-    labels={
-        "period": "Period",
-        "median_price": "Median price (£)",
-    },
+    y=["Monthly median", "12-month rolling average"],
+    labels={"period": "Period", "value": "Price (£)", "variable": "Measure"},
 )
 
+fig_price.update_layout(hovermode="x unified")
+fig_price.update_yaxes(tickprefix="£", tickformat=",")
+fig_price = style_figure(fig_price, 450)
 
-fig_price.update_traces(
-    hovertemplate="£%{y:,.0f}<extra></extra>"
-)
-
-
-fig_price = style_figure(
-    fig_price,
-    height=450,
-)
-
-
-st.plotly_chart(
-    fig_price,
-    use_container_width=True,
-)
-
+st.plotly_chart(fig_price, use_container_width=True)
 
 st.caption(
-    "Median price represents the middle recorded transaction "
-    "and is less affected by unusually high-value transactions "
-    "than the average."
+    "The rolling line is the 12-month average of monthly median prices, "
+    "which reduces short-term monthly noise."
 )
 
-
-# TRANSACTION VOLUME
-
 st.markdown("---")
-
 st.subheader("Transaction activity")
 
-
 fig_volume = px.bar(
-    ts,
+    monthly_display,
     x="period",
     y="n_transactions",
-    title="Transaction Volume Over Time",
-    labels={
-        "period": "Period",
-        "n_transactions": "Transactions",
-    },
+    labels={"period": "Period", "n_transactions": "Transactions"},
 )
 
+fig_volume.update_layout(hovermode="x unified")
+fig_volume = style_figure(fig_volume, 400)
 
-fig_volume = style_figure(
-    fig_volume,
-    height=400,
-)
+st.plotly_chart(fig_volume, use_container_width=True)
 
-
-st.plotly_chart(
-    fig_volume,
-    use_container_width=True,
-)
-
-
+data_range = load_date_range()
 st.caption(
-    "Transaction volume shows the number of recorded residential "
-    "property transactions in each period."
-)
-
-
-# FOOTER
-
-st.markdown("---")
-
-st.caption(
-    "Analysis period: "
-    f"{start.strftime('%d %b %Y')} "
-    f"to {end.strftime('%d %b %Y')}"
+    f"Selected period: {start:%d %b %Y} to {end:%d %b %Y} · "
+    f"Dataset currently available through {data_range['max_d']:%d %b %Y}"
 )
